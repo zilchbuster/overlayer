@@ -10,96 +10,81 @@ import org.springframework.web.bind.annotation.ResponseBody;
 
 import org.springframework.web.multipart.MultipartFile;
 
+import com.zilchbuster.overlayer.Overlayer;
 import com.zilchbuster.overlayer.Image;
 import com.zilchbuster.overlayer.ImageRepository;
 
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.lang.ProcessBuilder.Redirect;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
-import java.util.Scanner;
-import java.util.stream.Collectors;
+/*
+ * TODO: change this so that they're 2 endpoints,
+ * one of them takes 2 files and returns a token on success (using uuid,
+ * code up an interface and simply implement it with uuid generation)
+ * endpoint also generates overlayed image
+ * second endpoint accepts the valid token and returns the image
+ * Save generated token, and use token to generate image input and output storage paths.
+ */
 
 @Controller
 @RequestMapping(path="/overlay", produces="application/json") 
 public class OverlayerController {
 	@Autowired 
 	private ImageRepository imageRepository;
+	
+	@Autowired
+	private ImageFilePaths imageFilePaths;
+	
+	@Autowired
+	private Overlayer imageOverlayer;
 
 	@PostMapping(path="/overlay", produces="application/json")
-	public @ResponseBody String overlay (@RequestParam MultipartFile imageBlob1, @RequestParam MultipartFile imageBlob2, @RequestParam String token) {
-		String tempDir = System.getProperty("java.io.tmpdir");
-		String imagePath1 = tempDir + "/1_" + token;
-		String imagePath2 = tempDir + "/2_" + token;
-		String outputPath = tempDir + "/out_" + token + ".jpg";
-		File file1 = new File(imagePath1); 
-		File file2 = new File(imagePath2); 
-		imageRepository.save(new Image(imagePath1, imagePath2, token));
+	public @ResponseBody String overlay(@RequestParam MultipartFile imageBlob1, @RequestParam MultipartFile imageBlob2, @RequestParam double opacity) {
+		Image image = new Image();
+		String imageToken = image.getToken();
+		String paths[] = this.imageFilePaths.getTwoInputPaths(imageToken);
+		String outputPath = this.imageFilePaths.getOutputPath(imageToken);
+		imageRepository.save(image);
+		File file1 = new File(paths[0]); 
+		File file2 = new File(paths[1]); 
 		
 		try {
 			imageBlob1.transferTo(file1);
 			imageBlob2.transferTo(file2);
 		} catch (IllegalStateException | IOException e) {
-			e.printStackTrace();
-			return "Error: couldn't save input file 2";
-		}
-
-		ProcessBuilder pb = new ProcessBuilder(
-				"gimp", 
-				"-i", 
-				"-b", 
-				"'(overlay-images \"" + imagePath1 + 
-				"\" \"" + imagePath2 + "\" \"" + outputPath + "\" 50)'",
-				"-b",
-				"'(gimp-quit 0)'"
-		);
-		try {
-			pb.directory(new File(tempDir));
-			pb.redirectErrorStream(true);
-			Process p = pb.start();
-			InputStream inputStream = p.getInputStream();
-			BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
-			String line;
-			
-			int count = 0;
-			while ((line = reader.readLine()) != null) {
-			    if(line.contains("batch command executed successfully")) {
-			    	count++;
-			    	System.out.println(line);
-			    	if(count>1) {
-						inputStream.close();
-						p.getErrorStream().close();
-						p.getOutputStream().close();
-						p.destroy();
-						break;
-			    	}
-			    }
-			}
-			p.waitFor();
-		} catch (IOException | InterruptedException e) {
-			e.printStackTrace();
-			return "Error: couldn't run overlay command";
-		} 
-		
-		String content;
-		try {
-			content = new String(Files.readAllBytes(Paths.get(outputPath)));
-		} catch (IOException e) {
-			e.printStackTrace();
-			return "Error: couldn't read overlayed output";
+			return "{\"status\":\"fail\", \"message\": \"couldn't save input files\"}";
 		}
 		
-		return content;
+		try {
+			this.imageOverlayer.prepImages(paths[0], paths[1]);
+			this.imageOverlayer.overlayOnce(opacity, outputPath);
+		} catch (IOException e1) {
+			return "{\"status\":\"fail\", \"message\": \"couldn't  overlay\"}";
+		}
+		
+		return "{\"status\":\"success\",\"token\":\"" + imageToken +"\"}";
 	}
 
-	@GetMapping(path="/all")
-	public @ResponseBody Iterable<Image> getAllUsers() {
-		return imageRepository.findAll();
+	@GetMapping(path="/image")
+	public @ResponseBody byte[] image(@RequestParam String token){
+		Image image = this.imageRepository.findOneByToken(token);
+		
+		if(image==null) {
+			return "Error: no such token".getBytes();
+		}
+		
+		byte[] responseContent;
+		String imageToken = image.getToken();
+		String outputPath = this.imageFilePaths.getOutputPath(imageToken);
+		try {
+			responseContent = Files.readAllBytes(Paths.get(outputPath));
+		} catch (IOException e) {
+			return "Error: couldn't read overlayed output".getBytes();
+		}
+		
+		return responseContent;
 	}
 }

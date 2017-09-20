@@ -1,4 +1,4 @@
-# Image overlay API built with spring, Catalano
+# Image overlay API built with spring boot, Catalano
 
 This is an api that overlays 2 images. It's composed of 2 endpoints.
 

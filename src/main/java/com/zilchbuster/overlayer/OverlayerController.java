@@ -1,6 +1,7 @@
 package com.zilchbuster.overlayer;
 
 import org.springframework.beans.factory.annotation.Autowired;
+
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +14,8 @@ import org.springframework.web.multipart.MultipartFile;
 import com.zilchbuster.overlayer.Overlayer;
 import com.zilchbuster.overlayer.Image;
 import com.zilchbuster.overlayer.ImageRepository;
+import com.zilchbuster.overlayer.StatusResponse;
+import com.zilchbuster.overlayer.StatusEnum;
 
 import java.io.File;
 import java.io.IOException;
@@ -42,7 +45,7 @@ public class OverlayerController {
 	private Overlayer imageOverlayer;
 
 	@PostMapping(path="/overlay", produces="application/json")
-	public @ResponseBody String overlay(@RequestParam MultipartFile imageBlob1, @RequestParam MultipartFile imageBlob2, @RequestParam double opacity) {
+	public @ResponseBody StatusResponse overlay(@RequestParam MultipartFile imageBlob1, @RequestParam MultipartFile imageBlob2, @RequestParam double opacity) {
 		Image image = new Image();
 		String imageToken = image.getToken();
 		String paths[] = this.imageFilePaths.getTwoInputPaths(imageToken);
@@ -55,17 +58,19 @@ public class OverlayerController {
 			imageBlob1.transferTo(file1);
 			imageBlob2.transferTo(file2);
 		} catch (IllegalStateException | IOException e) {
-			return "{\"status\":\"fail\", \"message\": \"couldn't save input files\"}";
+			return new StatusResponse(StatusEnum.FAIL, "Couldn't save input files");
 		}
 		
 		try {
 			this.imageOverlayer.prepImages(paths[0], paths[1]);
 			this.imageOverlayer.overlayOnce(opacity, outputPath);
 		} catch (IOException e1) {
-			return "{\"status\":\"fail\", \"message\": \"couldn't  overlay\"}";
+			return new StatusResponse(StatusEnum.FAIL, "Couldn't overlay");
 		}
 		
-		return "{\"status\":\"success\",\"token\":\"" + imageToken +"\"}";
+		StatusResponse response = new StatusResponse(StatusEnum.SUCCESS);
+		response.setToken(imageToken);
+		return response;
 	}
 
 	@GetMapping(path="/image")

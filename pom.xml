@@ -53,6 +53,11 @@
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<dependency>
+			<groupId>commons-io</groupId>
+			<artifactId>commons-io</artifactId>
+			<version>2.5</version>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -60,8 +65,16 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						  <goals>
+							<goal>repackage</goal>
+						  </goals>
+					</execution>
+			    </executions>
 			</plugin>
 		</plugins>
+		<sourceDirectory>/home/khishman/dev/java/sources/github/Catalano-Framework</sourceDirectory>
 	</build>
 
 
